@@ -1,0 +1,11 @@
+{
+  "name": "@toqenapp/sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "jose": "^5.0.0"
+  }
+}
