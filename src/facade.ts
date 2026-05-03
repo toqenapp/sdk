@@ -16,7 +16,7 @@ import type {
 
 export function createToqen(config: ToqenConfig): ToqenInstance {
   return {
-    start: (overrides) =>
+    start: (overrides?) =>
       startAuthFlow({ ...config, ...overrides }),
 
     callback: (context) =>

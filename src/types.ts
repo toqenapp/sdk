@@ -1,5 +1,3 @@
-import type { APIContext } from "node_modules/astro/dist/types/public/context";
-
 export type ToqenConfig = {
   clientId: string;
   clientSecret: string;
@@ -48,7 +46,7 @@ export type ToqenIdTokenClaims = {
 };
 
 export type ToqenInstance = {
-  start: (overrides: { uiLocales: string }) => Promise<AuthStartResult>
+  start: (overrides?: Partial<ToqenConfig>) => Promise<AuthStartResult>
   callback: (context: Record<string, any>) => Promise<{ session: ToqenSession; claims: ToqenIdTokenClaims }>
   createSession: (session: ToqenSession) => Promise<{headers: Headers}>
   getSession: (token: string) => Promise<ToqenSession | null>

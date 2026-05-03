@@ -67,7 +67,7 @@ export async function handleCallback(
   const expectedState = parseCookie(cookieHeader, STATE_COOKIE_NAME) ?? undefined;
   const codeVerifier = parseCookie(cookieHeader, CODE_VERIFIER_COOKIE_NAME) ?? undefined;
 
-  if (!codeVerifier || (expectedState && state !== expectedState)) {
+  if (!codeVerifier || !expectedState || state !== expectedState) {
     throw new ToqenCallbackError('Mismatch — possible CSRF attack');
   }
 
@@ -108,13 +108,11 @@ export async function createSessionToken(
 
   const secret = new TextEncoder().encode(config.sessionSecret);
   const maxAge = (config.sessionMaxDays ?? DEFAULT_SESSION_MAX_DAYS) * 24 * 60 * 60;
-  const expiresAt = Math.floor(Date.now() / 1000) + maxAge;
   const isSecure = !config.isDevelopment;
 
   const customClaims: Record<string, unknown> = {};
   if (session.accessToken) customClaims.at = session.accessToken;
   if (session.refreshToken) customClaims.rt = session.refreshToken;
-  customClaims.eat = expiresAt;
 
   const token = await new SignJWT(customClaims)
     .setProtectedHeader({ alg: 'HS256' })
@@ -165,11 +163,7 @@ export async function getSessionToken(
     token: string,
 ): Promise<ToqenSession | null> {
   if (!token) return null;
-    const session = await verifySessionToken(config, token);
-    if (!session) return null;
-    return {
-      sub: session.sub,
-    };
+  return verifySessionToken(config, token);
 }
 
 export function decodeIdToken(idToken: string): ToqenIdTokenClaims {
@@ -180,7 +174,8 @@ export function decodeIdToken(idToken: string): ToqenIdTokenClaims {
   if (!payload) throw new ToqenCallbackError('Missing ID token payload');
   try {
     const padded = payload.replace(/-/g, '+').replace(/_/g, '/');
-    const decoded = atob(padded);
+    const paddedWithEquals = padded.padEnd(padded.length + (4 - (padded.length % 4)) % 4, '=');
+    const decoded = atob(paddedWithEquals);
     return JSON.parse(decoded) as ToqenIdTokenClaims;
   } catch {
     throw new ToqenCallbackError('Failed to decode ID token payload');
