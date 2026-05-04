@@ -1,6 +1,6 @@
 {
   "name": "@toqenapp/sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "SDK for integrating Toqen.app authorization into server-side applications",
   "license": "LicenseRef-Toqen-Source-Available",
   "author": "Toqen.app <hi@toqen.app>",
