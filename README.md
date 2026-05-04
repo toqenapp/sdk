@@ -6,12 +6,6 @@ SDK for integrating Toqen.app authorization flows into server-side applications.
 
 ---
 
-## Status
-
-`0.1.0` — in active development. The public API may change before a stable release.
-
----
-
 ## Requirements
 
 - Node.js 18 or later, or any runtime that provides the Web Crypto API and `fetch`
@@ -230,5 +224,5 @@ The SDK's PKCE implementation and cookie handling follow standard OAuth 2.0 PKCE
 
 This repository is source-available. Reading and evaluating the code is permitted. Production and commercial use require a separate written agreement with Toqen.app.
 
-Full terms: [LICENSE.md](./LICENSE.md)  
+Full terms: [LICENSE.md](./LICENSE.md)
 Licensing inquiries: **hi@toqen.app**
