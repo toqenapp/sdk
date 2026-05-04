@@ -1,6 +1,6 @@
-import { SESSION_COOKIE_SECURE, SESSION_COOKIE_DEV, STATE_COOKIE_MAX_AGE, STATE_COOKIE_NAME } from './constants';
-import { ToqenCallbackError, ToqenRefreshError } from './errors';
-import type { ToqenConfig, ToqenSession, ToqenTokenResponse } from './types';
+import { SESSION_COOKIE_SECURE, SESSION_COOKIE_DEV, STATE_COOKIE_MAX_AGE, STATE_COOKIE_NAME } from './constants.js';
+import { ToqenCallbackError, ToqenRefreshError } from './errors.js';
+import type { ToqenConfig, ToqenSession, ToqenTokenResponse } from './types.js';
 
 export function getSessionCookieName(isSecure: boolean): string {
   return isSecure ? SESSION_COOKIE_SECURE : SESSION_COOKIE_DEV;

@@ -4,15 +4,15 @@ import {
   createSessionToken,
   refreshAccessToken,
   getSessionToken,
-} from './client';
+} from './client.js';
 import {
   clearSessionCookie,
   getSessionCookieName,
-} from './session';
+} from './session.js';
 import type {
   ToqenConfig,
   ToqenInstance,
-} from './types';
+} from './types.js';
 
 export function createToqen(config: ToqenConfig): ToqenInstance {
   return {

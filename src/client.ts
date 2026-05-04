@@ -1,23 +1,23 @@
 import { SignJWT, jwtVerify } from 'jose';
-import { generatePkce, generateState } from './crypto';
-import { clearCookie, doRefresh, getSessionCookieName, parseCookie, serializeSessionCookie, serializeState, standardTokenExchange } from './session';
+import { generatePkce, generateState } from './crypto.js';
+import { clearCookie, doRefresh, getSessionCookieName, parseCookie, serializeSessionCookie, serializeState, standardTokenExchange } from './session.js';
 import {
   CODE_VERIFIER_COOKIE_NAME,
   DEFAULT_SESSION_MAX_DAYS,
   STATE_COOKIE_NAME,
   TOKEN_SKEW_SECONDS,
-} from './constants';
+} from './constants.js';
 import {
   ToqenCallbackError,
   ToqenConfigError,
-} from './errors';
+} from './errors.js';
 import type {
   ToqenConfig,
   ToqenSession,
   ToqenCallbackContext,
   AuthStartResult,
   ToqenIdTokenClaims,
-} from './types';
+} from './types.js';
 
 const refreshLocks = new Map<string, Promise<ToqenSession>>();
 

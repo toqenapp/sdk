@@ -1,4 +1,4 @@
-export { createToqen } from './facade';
+export { createToqen } from './facade.js';
 export type {
   ToqenConfig,
   ToqenSession,
@@ -7,11 +7,11 @@ export type {
   AuthStartResult,
   ToqenIdTokenClaims,
   ToqenInstance,
-} from './types';
+} from './types.js';
 export {
   ToqenError,
   ToqenCallbackError,
   ToqenRefreshError,
   ToqenSessionError,
   ToqenConfigError,
-} from './errors';
+} from './errors.js';
