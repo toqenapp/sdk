@@ -1,23 +1,100 @@
-# SDK Integration
+# SDK Integration Guide
 
-Status: In Development / Subject to Change
+This document covers integration patterns beyond what the README walkthrough includes.
 
-This document is a placeholder for SDK-specific integration guidance until an implementation is published.
+## Route structure
 
-## Partner Integration Principles
+A typical integration requires three server-side routes:
 
-Partners should:
+| Route | Handler | Purpose |
+|-------|---------|---------|
+| `GET /auth/login` | `toqen.start()` | Begins the authorization flow |
+| `GET /auth/callback` | `toqen.callback()` + `toqen.createSession()` | Completes the flow, sets session |
+| `GET /auth/logout` | `toqen.cookies.clearSession()` | Clears the session cookie |
 
-- start authorization for a clear user action
-- keep client secrets server-side
-- validate redirects and returned results
-- bind Toqen.app outcomes to the correct user session
-- handle denial and expiration safely
-- avoid misleading request descriptions
+All three routes are server-side only. No tokens or secrets should appear in client-side code or public URLs.
 
-## Current Limitation
+## Protecting routes
 
-Because this workspace snapshot does not contain an SDK implementation, this document does not provide installation commands, package names, or code examples.
+After creating a session, use `toqen.getSession(token)` in any server-side handler to validate the current request:
 
-Organization-level protocol and integration concepts belong in the `.github` documentation repository.
+```typescript
+const cookieName = toqen.cookies.sessionName(!isDevelopment);
+const token      = parse(request.headers.get('cookie') ?? '')[cookieName] ?? '';
+const session    = await toqen.getSession(token);
 
+if (!session) {
+  return Response.redirect('/auth/login', 302);
+}
+```
+
+`getSession` returns `null` for absent, expired, or tampered tokens. It does not throw.
+
+## Token refresh
+
+Access tokens expire. Use `toqen.refresh()` when you need a fresh access token and a refresh token is present in the session:
+
+```typescript
+const session = await toqen.getSession(token);
+
+if (session?.refreshToken && tokenNeedsRefresh(session)) {
+  const newSession = await toqen.refresh(session);
+  const { headers } = await toqen.createSession(newSession);
+  // attach headers to the outgoing response
+}
+```
+
+`refresh()` is safe to call from concurrent server requests for the same user — only one token exchange is made.
+
+## Cookie names
+
+The SDK uses different cookie names depending on the `isDevelopment` flag:
+
+| Environment | Cookie name |
+|-------------|-------------|
+| Production (`isDevelopment: false`) | `__Secure-toqen-session` |
+| Development (`isDevelopment: true`) | `toqen-session` |
+
+Use `toqen.cookies.sessionName(isSecure)` to get the correct name at runtime without hardcoding it.
+
+## Framework context shape
+
+`callback()` requires an object satisfying `ToqenCallbackContext`:
+
+```typescript
+type ToqenCallbackContext = {
+  url: URL;
+  request: { headers: { get(name: string): string | null } };
+};
+```
+
+Most server-side frameworks expose a compatible request context:
+
+- **Astro** — `APIContext` satisfies this type directly.
+- **Next.js App Router** — construct `{ url: new URL(request.url), request: { headers: request.headers } }` from `NextRequest`.
+- **SvelteKit** — `RequestEvent` has `.url` and `.request` which satisfy this shape.
+- **Hono / Elysia / other edge frameworks** — adapt `request.url` and `request.headers` similarly.
+
+## Environment variables
+
+Recommended names for the required configuration values:
+
+```
+TOQEN_CLIENT_ID
+TOQEN_CLIENT_SECRET
+TOQEN_ISSUER_URL
+TOQEN_REDIRECT_URI
+TOQEN_SESSION_SECRET
+```
+
+`TOQEN_CLIENT_SECRET` and `TOQEN_SESSION_SECRET` must not appear in client-side bundles or be committed to version control.
+
+## Session secret strength
+
+`sessionSecret` is used to sign session JWTs with HMAC-SHA256. Use a randomly generated string of at least 32 characters. A simple way to generate one:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Rotate it if you need to invalidate all active sessions immediately (all existing tokens will fail verification).

@@ -1,27 +1,22 @@
 # Contributing
 
-This repository is public to support Toqen.app SDK integration transparency.
+This repository is source-available. External pull requests are not accepted unless explicitly requested by maintainers.
 
-External pull requests are not accepted by default unless maintainers explicitly request them.
+## What is useful
 
-Useful contributions include:
+- Corrections to documentation that is factually wrong or misleading
+- Reports of code examples that would produce an insecure integration
+- Questions that identify unclear or ambiguous guidance (open an issue)
+- Private security reports (see [SECURITY.md](./SECURITY.md))
 
-- SDK documentation corrections
-- integration questions that identify unclear guidance
-- reports of unsafe examples or misleading API descriptions
-- private security reports
+## What is out of scope
 
-## Repository Boundary
+External contributions that add features, refactor internals, or modify the SDK logic will be closed without review. The SDK is developed and maintained internally by the Toqen.app team.
 
-This repository should document SDK-specific behavior only.
+## Security reports
 
-Platform-wide architecture, public protocol, trust model, privacy, lifecycle, and responsible disclosure docs belong in the organization `.github` repository.
+Do not report vulnerabilities through public issues. Email **hi@toqen.app** directly.
 
-## Security
+## License
 
-Do not report vulnerabilities publicly. Email:
-
-```text
-hi@toqen.app
-```
-
+By submitting any contribution (documentation fix, issue, or otherwise), you agree that your submission may be incorporated under the terms of the [Toqen.app SDK Source Available License](./LICENSE.md).

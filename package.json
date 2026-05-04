@@ -1,11 +1,52 @@
 {
   "name": "@toqenapp/sdk",
   "version": "0.1.0",
+  "description": "SDK for integrating Toqen.app authorization into server-side applications",
+  "license": "LicenseRef-Toqen-Source-Available",
+  "author": "Toqen.app <hi@toqen.app>",
+  "homepage": "https://toqen.app",
+  "bugs": {
+    "email": "hi@toqen.app"
+  },
+  "keywords": [
+    "toqen",
+    "auth",
+    "oauth2",
+    "oidc",
+    "pkce",
+    "authentication",
+    "authorization",
+    "session",
+    "jwt"
+  ],
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "LICENSE.md",
+    "NOTICE.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "jose": "^5.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
   }
 }

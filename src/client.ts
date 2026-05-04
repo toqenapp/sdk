@@ -14,6 +14,7 @@ import {
 import type {
   ToqenConfig,
   ToqenSession,
+  ToqenCallbackContext,
   AuthStartResult,
   ToqenIdTokenClaims,
 } from './types';
@@ -36,8 +37,8 @@ export async function startAuthFlow(config: ToqenConfig): Promise<AuthStartResul
     state,
     code_challenge: challenge,
     code_challenge_method: 'S256',
-    ui_locales: config.uiLocales,
   });
+  if (config.uiLocales) params.set('ui_locales', config.uiLocales);
 
   const headers = new Headers({ 'Content-Type': 'application/json' });
 
@@ -53,7 +54,7 @@ export async function startAuthFlow(config: ToqenConfig): Promise<AuthStartResul
 
 export async function handleCallback(
   config: ToqenConfig,
-  context: Record<string, any>,
+  context: ToqenCallbackContext,
 ): Promise<{ session: ToqenSession; claims: ToqenIdTokenClaims }> {
   const state = context.url.searchParams.get('state') ?? '';
   const iss = context.url.searchParams.get('iss') ?? undefined;

@@ -1,35 +1,52 @@
 # Security Policy
 
-This file covers the Toqen.app SDK repository.
+This document covers the `@toqenapp/sdk` repository.
 
-Report SDK or integration security concerns privately:
+## Reporting a vulnerability
 
-```text
+Report SDK or integration security concerns **privately** by email:
+
+```
 hi@toqen.app
 ```
 
-Do not open public issues for vulnerabilities.
+Do not open a public GitHub issue for a vulnerability. If the report involves a sensitive detail about a production integration, describe the class of issue only until a private channel is established.
 
-## SDK Scope
+We aim to acknowledge reports within 3 business days.
 
-In scope once implementation exists:
+---
 
-- unsafe SDK defaults
-- request construction bugs
-- result validation guidance
-- secret exposure in examples
-- documentation that could cause insecure integration
+## Scope
 
-Out of public issue scope:
+**In scope:**
 
-- backend validation internals
-- private provider routes
-- anti-abuse implementation details
-- database schemas
-- deployment topology
-- production secrets
+- Unsafe SDK defaults or behaviors
+- Incorrect CSRF state or PKCE validation logic
+- Session JWT signing or verification issues
+- Cookie flag misconfiguration (Secure, HttpOnly, SameSite)
+- Credential or token exposure in SDK code or official examples
+- Documentation that would lead an integrator to an insecure configuration
 
-## Current Status
+**Out of scope for this repository:**
 
-No SDK implementation files were present in this workspace snapshot before documentation was added. Security review should focus on documentation clarity until implementation is published.
+- Toqen.app backend infrastructure, provider internals, or private endpoints
+- Anti-abuse or rate-limiting implementation
+- Database schemas or deployment topology
+- Issues specific to a third-party integration (report to the relevant project)
 
+---
+
+## Known limitations
+
+- The ID token payload returned by `callback()` is decoded but the JWT signature is not independently verified by the SDK. Token integrity relies on the authenticated, TLS-protected token endpoint response.
+- Token revocation at the authorization server is not currently implemented in the logout flow.
+
+---
+
+## Supported versions
+
+| Version | Status |
+|---------|--------|
+| `0.1.x` | In active development — fixes applied on main |
+
+Pre-1.0 versions are subject to breaking changes. Security fixes are applied to the latest published version.

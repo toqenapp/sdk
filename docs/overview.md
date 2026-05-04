@@ -1,29 +1,40 @@
 # SDK Overview
 
-Status: In Development / Subject to Change
+`@toqenapp/sdk` is a server-side TypeScript SDK for integrating Toqen.app authorization into web applications.
 
-The Toqen.app SDK repository is intended to provide public integration tooling and SDK-specific documentation for partner applications.
+## What the SDK does
 
-## Current Status
+The SDK covers three server-side steps of the authorization flow:
 
-No SDK implementation files were present in this workspace snapshot before documentation was added.
+1. **Start** — generates a PKCE S256 code challenge and CSRF state, sets short-lived `HttpOnly` cookies, and returns the authorization URL to redirect to.
+2. **Callback** — validates the returned state and PKCE verifier, exchanges the authorization code for tokens, and returns a session and decoded ID token claims.
+3. **Session** — signs a session JWT with HMAC-SHA256, serializes it as an `HttpOnly` cookie, and clears the temporary flow cookies.
 
-This means:
+The SDK also provides helpers for reading the session on subsequent requests, refreshing tokens, and clearing the session cookie on logout.
 
-- no stable package name is documented
-- no install command is documented
-- no runtime support matrix is documented
-- no public API examples should be treated as implemented
+## What the SDK does not do
 
-## Intended Role
+- The ID token's cryptographic signature is not independently verified. Token integrity relies on the TLS-protected token endpoint response.
+- There is no server-side token revocation in the current logout flow.
+- The SDK does not include client-side components.
 
-The SDK should eventually help partners:
+## Package
 
-- start Toqen.app authorization flows
-- present supported handoff options
-- handle approval, denial, expiration, and cancellation
-- validate outcomes through supported server-side patterns
-- avoid placing secrets in client-side code
+```
+@toqenapp/sdk
+```
 
-Stable APIs must be documented here before developers rely on them.
+Requires Node.js 18 or later, or any runtime with the Web Crypto API and `fetch`.
 
+## Security model
+
+- PKCE (S256) per RFC 7636
+- CSRF state bound to a short-lived `HttpOnly` session cookie
+- Session tokens signed with HMAC-SHA256 via the `jose` library
+- All sensitive cookies use `HttpOnly` and `SameSite=Lax`; production cookies add `Secure`
+
+## Further reading
+
+- [README.md](../README.md) — installation, configuration, and usage examples
+- [SECURITY.md](../SECURITY.md) — scope, known limitations, and how to report issues
+- [LICENSE.md](../LICENSE.md) — source-available license terms
