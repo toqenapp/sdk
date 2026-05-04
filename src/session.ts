@@ -1,3 +1,4 @@
+import { SignJWT } from 'jose';
 import { SESSION_COOKIE_SECURE, SESSION_COOKIE_DEV, STATE_COOKIE_MAX_AGE, STATE_COOKIE_NAME } from './constants.js';
 import { ToqenCallbackError, ToqenRefreshError } from './errors.js';
 import type { ToqenConfig, ToqenSession, ToqenTokenResponse } from './types.js';
@@ -43,22 +44,50 @@ export function parseCookie(cookieHeader: string, name: string): string | null {
 }
 
 
+const CLIENT_ASSERTION_TYPE = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';
+const CLIENT_JWT_LIFETIME_SECONDS = 60;
+
+async function buildClientJwtAssertion(config: ToqenConfig, tokenEndpoint: string): Promise<string> {
+  const alg = 'HS256';
+  const key = new TextEncoder().encode(config.clientSecret);
+  const now = Math.floor(Date.now() / 1000);
+  return new SignJWT({})
+    .setProtectedHeader({ alg })
+    .setIssuer(config.clientId)
+    .setSubject(config.clientId)
+    .setAudience(tokenEndpoint)
+    .setJti(crypto.randomUUID())
+    .setIssuedAt(now)
+    .setExpirationTime(now + CLIENT_JWT_LIFETIME_SECONDS)
+    .sign(key);
+}
+
+async function applyClientAuth(
+  config: ToqenConfig,
+  body: URLSearchParams,
+  tokenEndpoint: string,
+): Promise<void> {
+    const assertion = await buildClientJwtAssertion(config, tokenEndpoint);
+    body.set('client_assertion_type', CLIENT_ASSERTION_TYPE);
+    body.set('client_assertion', assertion);
+}
+
 export async function standardTokenExchange(
   config: ToqenConfig,
   code: string,
   codeVerifier: string,
 ): Promise<ToqenTokenResponse> {
+  const tokenEndpoint = `${config.issuerUrl}/token`;
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
     redirect_uri: config.redirectUri,
     client_id: config.clientId,
-    client_secret: config.clientSecret,
   });
-
   body.set('code_verifier', codeVerifier);
+  await applyClientAuth(config, body, tokenEndpoint);
 
-  const res = await fetch(`${config.issuerUrl}/token`, {
+  const res = await fetch(tokenEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
@@ -82,14 +111,15 @@ export async function doRefresh(
     throw new ToqenRefreshError('No refresh token available in session');
   }
 
+  const tokenEndpoint = `${config.issuerUrl}/token`;
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: session.refreshToken,
     client_id: config.clientId,
-    client_secret: config.clientSecret,
   });
+  await applyClientAuth(config, body, tokenEndpoint);
 
-  const res = await fetch(`${config.issuerUrl}/token`, {
+  const res = await fetch(tokenEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
