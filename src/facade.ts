@@ -4,6 +4,7 @@ import {
   createSessionToken,
   refreshAccessToken,
   getSessionToken,
+  endSession,
 } from './client.js';
 import {
   clearSessionCookie,
@@ -31,12 +32,11 @@ export function createToqen(config: ToqenConfig): ToqenInstance {
     refresh: (session) =>
       refreshAccessToken(config, session),
 
+    endSession: () => endSession(config),
+
     cookies: {
       sessionName: (secure) =>
         getSessionCookieName(secure),
-
-      clearSession: (secure) =>
-        clearSessionCookie(secure),
     },
   };
 }

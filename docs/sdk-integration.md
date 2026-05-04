@@ -10,7 +10,7 @@ A typical integration requires three server-side routes:
 |-------|---------|---------|
 | `GET /auth/login` | `toqen.start()` | Begins the authorization flow |
 | `GET /auth/callback` | `toqen.callback()` + `toqen.createSession()` | Completes the flow, sets session |
-| `GET /auth/logout` | `toqen.cookies.clearSession()` | Clears the session cookie |
+| `GET /auth/logout` | `toqen.endSession()` | Clears the session cookie and ends the session at the provider |
 
 All three routes are server-side only. No tokens or secrets should appear in client-side code or public URLs.
 

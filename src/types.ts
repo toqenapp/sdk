@@ -4,6 +4,7 @@ export type ToqenConfig = {
   issuerUrl: string;
   redirectUri: string;
   sessionSecret: string;
+  logoutRedirectUri?: string;
   uiLocales?: string;
   sessionMaxDays?: number;
   returnUri?: string;
@@ -49,8 +50,8 @@ export type ToqenInstance = {
   createSession: (session: ToqenSession) => Promise<{ headers: Headers }>;
   getSession: (token: string) => Promise<ToqenSession | null>;
   refresh: (session: ToqenSession) => Promise<ToqenSession>;
+  endSession: () => Response;
   cookies: {
     sessionName: (isSecure: boolean) => string;
-    clearSession: (secure: boolean) => string;
   };
 };

@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { generatePkce, generateState } from './crypto.js';
-import { clearCookie, doRefresh, getSessionCookieName, parseCookie, serializeSessionCookie, serializeState, standardTokenExchange } from './session.js';
+import { clearCookie, clearSessionCookie, doRefresh, getSessionCookieName, parseCookie, serializeSessionCookie, serializeState, standardTokenExchange } from './session.js';
 import {
   CODE_VERIFIER_COOKIE_NAME,
   DEFAULT_SESSION_MAX_DAYS,
@@ -99,6 +99,22 @@ export async function refreshAccessToken(
 
   refreshLocks.set(lockKey, promise);
   return promise;
+}
+
+export function endSession(config: ToqenConfig): Response {
+  const secure = !config.isDevelopment;
+  const clearCookie = clearSessionCookie(secure);
+
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    post_logout_redirect_uri: config.logoutRedirectUri ?? '',
+  });
+
+  const headers = new Headers();
+  headers.set('Location', `${config.issuerUrl}/session/end?${params}`);
+  headers.set('Set-Cookie', clearCookie);
+
+  return new Response(null, { status: 302, headers });
 }
 
 export async function createSessionToken(

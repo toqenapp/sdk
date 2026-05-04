@@ -10,12 +10,12 @@ The SDK covers three server-side steps of the authorization flow:
 2. **Callback** — validates the returned state and PKCE verifier, exchanges the authorization code for tokens, and returns a session and decoded ID token claims.
 3. **Session** — signs a session JWT with HMAC-SHA256, serializes it as an `HttpOnly` cookie, and clears the temporary flow cookies.
 
-The SDK also provides helpers for reading the session on subsequent requests, refreshing tokens, and clearing the session cookie on logout.
+The SDK also provides helpers for reading the session on subsequent requests, refreshing tokens, and ending the session (both locally and at the provider) on logout.
 
 ## What the SDK does not do
 
 - The ID token's cryptographic signature is not independently verified. Token integrity relies on the TLS-protected token endpoint response.
-- There is no server-side token revocation in the current logout flow.
+- Token revocation at the authorization server is not explicitly requested during logout — the SDK ends the session via the OIDC end-session endpoint, which is sufficient for most providers.
 - The SDK does not include client-side components.
 
 ## Package

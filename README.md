@@ -29,14 +29,15 @@ Create one instance per application, typically in a shared server-side module:
 import { createToqen } from '@toqenapp/sdk';
 
 const toqen = createToqen({
-  clientId:       process.env.TOQEN_CLIENT_ID!,
-  clientSecret:   process.env.TOQEN_CLIENT_SECRET!,
-  issuerUrl:      process.env.TOQEN_ISSUER_URL!,
-  redirectUri:    process.env.TOQEN_REDIRECT_URI!,
-  sessionSecret:  process.env.TOQEN_SESSION_SECRET!,
-  returnUri:      '/dashboard',
-  sessionMaxDays: 30,
-  isDevelopment:  process.env.NODE_ENV !== 'production',
+  clientId:           process.env.TOQEN_CLIENT_ID!,
+  clientSecret:       process.env.TOQEN_CLIENT_SECRET!,
+  issuerUrl:          process.env.TOQEN_ISSUER_URL!,
+  redirectUri:        process.env.TOQEN_REDIRECT_URI!,
+  sessionSecret:      process.env.TOQEN_SESSION_SECRET!,
+  returnUri:          '/dashboard',
+  logoutRedirectUri:  process.env.TOQEN_APP_URL!,
+  sessionMaxDays:     30,
+  isDevelopment:      process.env.NODE_ENV !== 'production',
 });
 ```
 
@@ -49,6 +50,7 @@ const toqen = createToqen({
 | `sessionSecret` | `string` | Yes | Signs session JWTs. Minimum 32 random characters recommended |
 | `uiLocales` | `string` | No | BCP 47 locale hint for the authorization UI (e.g. `en`, `fr`) |
 | `returnUri` | `string` | No | Redirect target after session creation. Default: `/` |
+| `logoutRedirectUri` | `string` | No | Where to send the user after the provider ends the session. Default: `/` |
 | `sessionMaxDays` | `number` | No | Session lifetime in days. Default: `30` |
 | `isDevelopment` | `boolean` | No | Omits the `Secure` cookie flag when `true` |
 
@@ -131,15 +133,11 @@ Concurrent refresh calls for the same user are deduplicated — a single token r
 ```typescript
 // GET /auth/logout
 export async function GET() {
-  const clearCookie = toqen.cookies.clearSession(!isDevelopment);
-  return new Response(null, {
-    status: 302,
-    headers: { Location: '/', 'Set-Cookie': clearCookie },
-  });
+  return toqen.endSession();
 }
 ```
 
-This clears the session cookie from the browser. Token revocation at the authorization server is not part of the current SDK.
+`endSession()` clears the session cookie and redirects the user to the provider's end-session endpoint (`/session/end`). The provider terminates its own session and then redirects back to `logoutRedirectUri`.
 
 ---
 
