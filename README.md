@@ -28,137 +28,129 @@ Create one instance per application, typically in a shared server-side module:
 ```typescript
 import { createToqen } from '@toqenapp/sdk';
 
-const toqen = createToqen({
-  clientId:           process.env.TOQEN_CLIENT_ID!,
-  clientSecret:       process.env.TOQEN_CLIENT_SECRET!,
-  issuerUrl:          process.env.TOQEN_ISSUER_URL!,
-  redirectUri:        process.env.TOQEN_REDIRECT_URI!,
-  sessionSecret:      process.env.TOQEN_SESSION_SECRET!,
-  returnUri:          '/dashboard',
-  logoutRedirectUri:  process.env.TOQEN_APP_URL!,
-  sessionMaxDays:     30,
-  isDevelopment:      process.env.NODE_ENV !== 'production',
+export const toqen = createToqen({
+  clientId: process.env.TOQEN_CLIENT_ID!,
+  clientSecret: process.env.TOQEN_CLIENT_SECRET!,
+  issuerUrl: process.env.TOQEN_ISSUER_URL!,
+  redirectUri: process.env.TOQEN_REDIRECT_URI!,
+  sessionSecret: process.env.TOQEN_SESSION_SECRET!,
+  logoutRedirectUri: process.env.TOQEN_LOGOUT_REDIRECT_URI!,
+  sessionMaxDays: 30,
+  isDevelopment: process.env.NODE_ENV !== 'production',
 });
 ```
 
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `clientId` | `string` | Yes | OAuth 2.0 client ID |
-| `clientSecret` | `string` | Yes | OAuth 2.0 client secret — keep server-side only |
+| `clientSecret` | `string` | Yes | OAuth 2.0 client secret. Keep server-side only |
 | `issuerUrl` | `string` | Yes | Toqen.app issuer base URL |
 | `redirectUri` | `string` | Yes | Registered authorization callback URI |
-| `sessionSecret` | `string` | Yes | Signs session JWTs. Minimum 32 random characters recommended |
-| `uiLocales` | `string` | No | BCP 47 locale hint for the authorization UI (e.g. `en`, `fr`) |
-| `returnUri` | `string` | No | Redirect target after session creation. Default: `/` |
-| `logoutRedirectUri` | `string` | No | Where to send the user after the provider ends the session. Default: `/` |
+| `sessionSecret` | `string` | Yes | Signs session JWTs and returnTo cookies. Use at least 32 random characters |
+| `logoutRedirectUri` | `string` | Yes | Where to send the user after the provider ends the session |
+| `uiLocales` | `string` | No | BCP 47 locale hint for the authorization UI, for example `en` or `fr` |
 | `sessionMaxDays` | `number` | No | Session lifetime in days. Default: `30` |
 | `isDevelopment` | `boolean` | No | Omits the `Secure` cookie flag when `true` |
 
 ---
 
-## Auth flow
+## Auth Flow
 
-The authorization flow runs entirely in server-side route handlers across three steps.
-
-### 1. Start authorization
+### 1. Start Authorization
 
 ```typescript
 // GET /auth/login
 import { toqen } from '@/lib/toqen';
 
-export async function GET() {
-  const { authorizationUrl, headers } = await toqen.start();
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const returnTo = url.searchParams.get('returnTo') ?? '/';
+  const { authorizationUrl, headers } = await toqen.start({ returnTo });
+
   headers.set('Location', authorizationUrl);
   return new Response(null, { status: 302, headers });
 }
 ```
 
-`start()` generates a PKCE S256 code challenge and a cryptographically random CSRF state value. Both are written into short-lived `HttpOnly` cookies included in the returned `headers`. You do not need to manage PKCE or state manually.
 
-To pass a per-request locale override:
-
-```typescript
-const { authorizationUrl, headers } = await toqen.start({ uiLocales: 'fr' });
-```
-
-### 2. Handle the callback
+### 2. Handle The Callback
 
 ```typescript
 // GET /auth/callback
+import { toqen } from '@/lib/toqen';
+
 export async function GET(context: ToqenCallbackContext) {
-  const { session, claims } = await toqen.callback(context);
-  const { headers } = await toqen.createSession(session);
+  const { session, returnTo } = await toqen.callback(context);
+  const { headers } = await toqen.createSession(session, { returnTo });
+
   return new Response(null, { status: 302, headers });
 }
 ```
 
-`callback()` reads the state and PKCE verifier from the incoming cookies, validates both, then exchanges the authorization code for tokens. `createSession()` signs a session JWT and returns `headers` containing a `Location` redirect, the session cookie, and directives to clear the temporary flow cookies.
+`callback()` validates state and PKCE cookies, exchanges the authorization code for tokens, and reads the signed returnTo cookie if present. `createSession()` signs the session JWT, sets the session cookie, redirects to the verified relative return path or `/`, and clears the temporary auth cookies.
 
-> **ID token note:** The `claims` object contains the decoded payload of the ID token (sub, email, name, iat, exp). The payload is decoded from the token received over the TLS-protected token endpoint. The ID token's cryptographic signature is not independently verified by the SDK — token integrity relies on the authenticated token endpoint response.
-
-### 3. Read the session
+### 3. Read The Session
 
 ```typescript
-import { parse } from 'cookie'; // or your framework's cookie utility
+import { parse } from 'cookie';
+import { toqen } from '@/lib/toqen';
 
-const cookieName   = toqen.cookies.sessionName(!isDevelopment);
+const cookieName = toqen.cookies.sessionName(!isDevelopment);
 const cookieHeader = request.headers.get('cookie') ?? '';
-const token        = parse(cookieHeader)[cookieName] ?? '';
+const token = parse(cookieHeader)[cookieName] ?? '';
 
 const session = await toqen.getSession(token);
 
 if (!session) {
-  // token absent, expired, or invalid
+  return Response.redirect('/auth/login', 302);
 }
-
-// session.sub          — user identifier
-// session.accessToken  — current access token (if stored)
-// session.refreshToken — refresh token (if present)
 ```
 
-### 4. Refresh tokens
+### 4. Refresh Tokens
 
 ```typescript
-if (session?.refreshToken) {
+if (session.refreshToken) {
   const newSession = await toqen.refresh(session);
-  const { headers } = await toqen.createSession(newSession);
-  // apply headers to the outgoing response to update the session cookie
+  const url = new URL(request.url);
+  const { headers } = await toqen.createSession(newSession, {
+    returnTo: url.pathname + url.search,
+  });
 }
 ```
 
-Concurrent refresh calls for the same user are deduplicated — a single token request is made even when parallel server requests arrive simultaneously.
+Concurrent refresh calls for the same user are deduplicated.
 
-### 5. End the session
+### 5. End The Session
 
 ```typescript
 // GET /auth/logout
+import { toqen } from '@/lib/toqen';
+
 export async function GET() {
   return toqen.endSession();
 }
 ```
 
-`endSession()` clears the session cookie and redirects the user to the provider's end-session endpoint (`/session/end`). The provider terminates its own session and then redirects back to `logoutRedirectUri`.
 
----
+## Cookies
 
-## Session and cookie handling
-
-The SDK manages these cookies automatically across the auth flow:
+The SDK manages these cookies on the server:
 
 | Cookie | Purpose | Max-Age | Flags |
 |--------|---------|---------|-------|
-| `__toqen_state` | CSRF state (auth flow only) | 10 min | HttpOnly, SameSite=Lax |
-| `__toqen_cv` | PKCE code verifier (auth flow only) | 10 min | HttpOnly, SameSite=Lax |
-| `__Secure-toqen-session` | Signed session JWT (production) | configurable | HttpOnly, SameSite=Lax, Secure |
-| `toqen-session` | Signed session JWT (development) | configurable | HttpOnly, SameSite=Lax |
+| `__toqen_state` | CSRF state during auth flow | 10 min | HttpOnly, SameSite=Lax |
+| `__toqen_cv` | PKCE code verifier during auth flow | 10 min | HttpOnly, SameSite=Lax |
+| `__toqen_return_to` | Signed relative post-login redirect path | 10 min | HttpOnly, SameSite=Lax, Secure in production |
+| `__Secure-toqen-session` | Signed session JWT in production | configurable | HttpOnly, SameSite=Lax, Secure |
+| `toqen-session` | Signed session JWT in development | configurable | HttpOnly, SameSite=Lax |
 
-Flow cookies are set by `start()` and cleared automatically when `createSession()` runs at the end of the callback. There is no step where you need to copy, forward, or manually clear them between the two route handlers.
+The returnTo cookie payload is base64url JSON with an expiration timestamp and an HMAC SHA-256 signature. Verification uses a constant-time comparison. Hash fragments are not preserved.
 
 ---
 
-## Framework integration
+## Framework Context Shape
 
-`callback()` accepts any value satisfying `ToqenCallbackContext`:
+`callback()` accepts a value satisfying `ToqenCallbackContext`:
 
 ```typescript
 type ToqenCallbackContext = {
@@ -167,54 +159,36 @@ type ToqenCallbackContext = {
 };
 ```
 
-### Astro
-
-Astro's `APIContext` satisfies `ToqenCallbackContext` directly — pass it without modification:
+Astro `APIContext` satisfies this shape directly. For Next.js App Router, construct it from `NextRequest`:
 
 ```typescript
-// src/pages/api/auth/callback.ts
-import type { APIContext } from 'astro';
-import { toqen } from '@/lib/toqen';
-
-export async function GET(context: APIContext) {
-  const { session } = await toqen.callback(context);
-  const { headers } = await toqen.createSession(session);
-  return new Response(null, { status: 302, headers });
-}
-```
-
-### Next.js (App Router)
-
-Construct the context from the incoming `NextRequest`:
-
-```typescript
-// app/api/auth/callback/route.ts
 import type { NextRequest } from 'next/server';
 import { toqen } from '@/lib/toqen';
 
 export async function GET(request: NextRequest) {
   const context = {
-    url:     new URL(request.url),
+    url: new URL(request.url),
     request: { headers: request.headers },
   };
-  const { session } = await toqen.callback(context);
-  const { headers } = await toqen.createSession(session);
+
+  const { session, returnTo } = await toqen.callback(context);
+  const { headers } = await toqen.createSession(session, { returnTo });
+
   return new Response(null, { status: 302, headers });
 }
 ```
 
+The SDK does not import Next.js `server-only`; keep `@toqenapp/sdk` imports in framework server files.
+
 ---
 
-## Security notes
+## Security Notes
 
-- **PKCE (S256):** A fresh code verifier and challenge are generated per authorization request. The verifier is stored in a `HttpOnly` cookie and validated before any token exchange occurs.
-- **CSRF protection:** A cryptographically random state value is bound to the browser session via cookie and verified on return. If the state cookie is absent or mismatched, the callback throws before any code exchange.
-- **Session integrity:** Session tokens are HMAC-SHA256 signed using `sessionSecret` and verified on every `getSession()` call via the `jose` library.
-- **ID token claims:** The claims returned by `callback()` are decoded from the ID token received from the token endpoint over HTTPS. The JWT signature is not independently verified by the SDK. Avoid using raw claims as the sole basis for high-assurance authorization decisions.
-- **Secret handling:** `clientSecret` and `sessionSecret` are server-side values. They must not appear in client bundles, `.env` files committed to version control, or public configuration.
-- **Runtime:** The SDK requires the Web Crypto API (`crypto.subtle`). Node.js 18+, Deno, Bun, and Cloudflare Workers are supported.
-
-The SDK's PKCE implementation and cookie handling follow standard OAuth 2.0 PKCE practices (RFC 7636).
+- PKCE S256 verifier and CSRF state are generated per authorization request and stored in short-lived `HttpOnly` cookies.
+- Session tokens are HMAC-SHA256 signed using `sessionSecret` and verified through the `jose` library.
+- returnTo values are relative only. External URLs and protocol-relative URLs are rejected.
+- ID token claims are decoded from the token endpoint response. The SDK does not independently verify the ID token signature.
+- `clientSecret` and `sessionSecret` must not appear in client bundles, committed `.env` files, or public configuration.
 
 ---
 

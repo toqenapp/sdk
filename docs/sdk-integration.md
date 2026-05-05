@@ -1,36 +1,67 @@
 # SDK Integration Guide
 
-This document covers integration patterns beyond what the README walkthrough includes.
+This document covers integration patterns beyond the README walkthrough.
 
-## Route structure
+## Route Structure
 
 A typical integration requires three server-side routes:
 
 | Route | Handler | Purpose |
 |-------|---------|---------|
 | `GET /auth/login` | `toqen.start()` | Begins the authorization flow |
-| `GET /auth/callback` | `toqen.callback()` + `toqen.createSession()` | Completes the flow, sets session |
+| `GET /auth/callback` | `toqen.callback()` plus `toqen.createSession()` | Completes the flow, sets session |
 | `GET /auth/logout` | `toqen.endSession()` | Clears the session cookie and ends the session at the provider |
 
-All three routes are server-side only. No tokens or secrets should appear in client-side code or public URLs.
+All three routes are server-side only. No tokens or secrets should appear in client-side code or public configuration.
 
-## Protecting routes
+## Redirect Helper
 
-After creating a session, use `toqen.getSession(token)` in any server-side handler to validate the current request:
+```typescript
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const { authorizationUrl, headers } = await toqen.start({
+    returnTo: url.searchParams.get('returnTo') ?? '/',
+  });
+
+  headers.set('Location', authorizationUrl);
+  return new Response(null, { status: 302, headers });
+}
+```
+
+## Protecting Routes
+
+After creating a session, use `toqen.getSession(token)` in server-side handlers to validate the current request:
 
 ```typescript
 const cookieName = toqen.cookies.sessionName(!isDevelopment);
-const token      = parse(request.headers.get('cookie') ?? '')[cookieName] ?? '';
-const session    = await toqen.getSession(token);
+const token = parse(request.headers.get('cookie') ?? '')[cookieName] ?? '';
+const session = await toqen.getSession(token);
 
 if (!session) {
   return Response.redirect('/auth/login', 302);
 }
 ```
 
-`getSession` returns `null` for absent, expired, or tampered tokens. It does not throw.
+`getSession` returns `null` for absent, expired, or tampered tokens.
 
-## Token refresh
+## returnTo Handling
+
+`returnTo` values are server-only after the login route receives them:
+
+- The value must be a relative path starting with `/`.
+- External URLs and protocol-relative URLs such as `//example.com` are rejected.
+- Hash fragments are not preserved.
+- The SDK stores the value in a signed, expiring, `HttpOnly` cookie.
+- The cookie is cleared when `createSession()` returns the callback response headers.
+
+Callback handlers should pass the verified value through:
+
+```typescript
+const { session, returnTo } = await toqen.callback(context);
+const { headers } = await toqen.createSession(session, { returnTo });
+```
+
+## Token Refresh
 
 Access tokens expire. Use `toqen.refresh()` when you need a fresh access token and a refresh token is present in the session:
 
@@ -39,25 +70,26 @@ const session = await toqen.getSession(token);
 
 if (session?.refreshToken && tokenNeedsRefresh(session)) {
   const newSession = await toqen.refresh(session);
-  const { headers } = await toqen.createSession(newSession);
-  // attach headers to the outgoing response
+  const { headers } = await toqen.createSession(newSession, {
+    returnTo: '/account',
+  });
 }
 ```
 
-`refresh()` is safe to call from concurrent server requests for the same user — only one token exchange is made.
+`refresh()` is safe to call from concurrent server requests for the same user; only one token exchange is made.
 
-## Cookie names
+## Cookie Names
 
-The SDK uses different cookie names depending on the `isDevelopment` flag:
+The SDK uses different session cookie names depending on the `isDevelopment` flag:
 
 | Environment | Cookie name |
 |-------------|-------------|
 | Production (`isDevelopment: false`) | `__Secure-toqen-session` |
 | Development (`isDevelopment: true`) | `toqen-session` |
 
-Use `toqen.cookies.sessionName(isSecure)` to get the correct name at runtime without hardcoding it.
+Use `toqen.cookies.sessionName(isSecure)` to get the correct name at runtime.
 
-## Framework context shape
+## Framework Context Shape
 
 `callback()` requires an object satisfying `ToqenCallbackContext`:
 
@@ -70,28 +102,31 @@ type ToqenCallbackContext = {
 
 Most server-side frameworks expose a compatible request context:
 
-- **Astro** — `APIContext` satisfies this type directly.
-- **Next.js App Router** — construct `{ url: new URL(request.url), request: { headers: request.headers } }` from `NextRequest`.
-- **SvelteKit** — `RequestEvent` has `.url` and `.request` which satisfy this shape.
-- **Hono / Elysia / other edge frameworks** — adapt `request.url` and `request.headers` similarly.
+- **Astro** - `APIContext` satisfies this type directly.
+- **Next.js App Router** - construct `{ url: new URL(request.url), request: { headers: request.headers } }` from `NextRequest`.
+- **SvelteKit** - `RequestEvent` has `.url` and `.request`.
+- **Hono / Elysia / other edge frameworks** - adapt `request.url` and `request.headers` similarly.
 
-## Environment variables
+The SDK stays framework-agnostic and does not import Next.js `server-only`.
+
+## Environment Variables
 
 Recommended names for the required configuration values:
 
-```
+```text
 TOQEN_CLIENT_ID
 TOQEN_CLIENT_SECRET
 TOQEN_ISSUER_URL
 TOQEN_REDIRECT_URI
+TOQEN_LOGOUT_REDIRECT_URI
 TOQEN_SESSION_SECRET
 ```
 
 `TOQEN_CLIENT_SECRET` and `TOQEN_SESSION_SECRET` must not appear in client-side bundles or be committed to version control.
 
-## Session secret strength
+## Session Secret Strength
 
-`sessionSecret` is used to sign session JWTs with HMAC-SHA256. Use a randomly generated string of at least 32 characters. A simple way to generate one:
+`sessionSecret` signs session JWTs and returnTo cookies. Use a randomly generated string of at least 32 characters.
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"

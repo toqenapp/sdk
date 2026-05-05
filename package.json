@@ -41,6 +41,8 @@
   },
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node tests/entrypoints.test.mjs",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

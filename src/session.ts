@@ -1,7 +1,15 @@
 import { SignJWT } from 'jose';
-import { SESSION_COOKIE_SECURE, SESSION_COOKIE_DEV, STATE_COOKIE_MAX_AGE, STATE_COOKIE_NAME } from './constants.js';
+import {
+  SESSION_COOKIE_DEV,
+  SESSION_COOKIE_SECURE,
+  STATE_COOKIE_MAX_AGE,
+  STATE_COOKIE_NAME,
+} from './constants.js';
+import { ensureServer } from './ensure-server.js';
 import { ToqenCallbackError, ToqenRefreshError } from './errors.js';
 import type { ToqenConfig, ToqenSession, ToqenTokenResponse } from './types.js';
+
+ensureServer();
 
 export function getSessionCookieName(isSecure: boolean): string {
   return isSecure ? SESSION_COOKIE_SECURE : SESSION_COOKIE_DEV;
@@ -43,14 +51,17 @@ export function parseCookie(cookieHeader: string, name: string): string | null {
   return null;
 }
 
-
 const CLIENT_ASSERTION_TYPE = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';
 const CLIENT_JWT_LIFETIME_SECONDS = 60;
 
-async function buildClientJwtAssertion(config: ToqenConfig, tokenEndpoint: string): Promise<string> {
+async function buildClientJwtAssertion(
+  config: ToqenConfig,
+  tokenEndpoint: string,
+): Promise<string> {
   const alg = 'HS256';
   const key = new TextEncoder().encode(config.clientSecret);
   const now = Math.floor(Date.now() / 1000);
+
   return new SignJWT({})
     .setProtectedHeader({ alg })
     .setIssuer(config.clientId)
@@ -67,9 +78,9 @@ async function applyClientAuth(
   body: URLSearchParams,
   tokenEndpoint: string,
 ): Promise<void> {
-    const assertion = await buildClientJwtAssertion(config, tokenEndpoint);
-    body.set('client_assertion_type', CLIENT_ASSERTION_TYPE);
-    body.set('client_assertion', assertion);
+  const assertion = await buildClientJwtAssertion(config, tokenEndpoint);
+  body.set('client_assertion_type', CLIENT_ASSERTION_TYPE);
+  body.set('client_assertion', assertion);
 }
 
 export async function standardTokenExchange(

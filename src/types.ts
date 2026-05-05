@@ -4,11 +4,15 @@ export type ToqenConfig = {
   issuerUrl: string;
   redirectUri: string;
   sessionSecret: string;
-  logoutRedirectUri?: string;
+  logoutRedirectUri: string;
   uiLocales?: string;
   sessionMaxDays?: number;
-  returnUri?: string;
   isDevelopment?: boolean;
+};
+
+export type ToqenStartOptions = {
+  uiLocales?: string;
+  returnTo?: string;
 };
 
 export type ToqenSession = {
@@ -36,6 +40,16 @@ export type AuthStartResult = {
   headers: Headers;
 };
 
+export type ToqenCallbackResult = {
+  session: ToqenSession;
+  claims: ToqenIdTokenClaims;
+  returnTo: string | null;
+};
+
+export type CreateSessionOptions = {
+  returnTo?: string | null;
+};
+
 export type ToqenIdTokenClaims = {
   sub: string;
   email?: string;
@@ -45,9 +59,12 @@ export type ToqenIdTokenClaims = {
 };
 
 export type ToqenInstance = {
-  start: (overrides?: Partial<ToqenConfig>) => Promise<AuthStartResult>;
-  callback: (context: ToqenCallbackContext) => Promise<{ session: ToqenSession; claims: ToqenIdTokenClaims }>;
-  createSession: (session: ToqenSession) => Promise<{ headers: Headers }>;
+  start: (options?: ToqenStartOptions) => Promise<AuthStartResult>;
+  callback: (context: ToqenCallbackContext) => Promise<ToqenCallbackResult>;
+  createSession: (
+    session: ToqenSession,
+    options?: CreateSessionOptions,
+  ) => Promise<{ headers: Headers }>;
   getSession: (token: string) => Promise<ToqenSession | null>;
   refresh: (session: ToqenSession) => Promise<ToqenSession>;
   endSession: () => Response;

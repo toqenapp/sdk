@@ -1,3 +1,7 @@
+import { ensureServer } from './ensure-server.js';
+
+ensureServer();
+
 /** Default session lifetime: 30 days in seconds */
 export const DEFAULT_SESSION_MAX_DAYS = 30;
 
@@ -17,3 +21,8 @@ export const SESSION_COOKIE_SECURE = '__Secure-toqen-session';
 
 /** Session cookie name (development) */
 export const SESSION_COOKIE_DEV = 'toqen-session';
+
+export const RETURN_TO_COOKIE_NAME = '__toqen_return_to';
+
+/** Max age for returnTo cookie: 10 minutes */
+export const RETURN_TO_COOKIE_MAX_AGE = 600;

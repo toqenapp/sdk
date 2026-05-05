@@ -17,14 +17,19 @@ import type {
   ToqenCallbackContext,
   AuthStartResult,
   ToqenIdTokenClaims,
+  CreateSessionOptions,
+  ToqenCallbackResult,
+  ToqenStartOptions,
 } from './types.js';
+import { clearReturnToCookie, createReturnToCookie, normalizeReturnTo, readReturnToCookie } from './return-to.js';
 
 const refreshLocks = new Map<string, Promise<ToqenSession>>();
 
-export async function startAuthFlow(config: ToqenConfig): Promise<AuthStartResult> {
-  if (!config.issuerUrl) throw new ToqenConfigError('issuerUrl is required');
-  if (!config.clientId) throw new ToqenConfigError('clientId is required');
-  if (!config.redirectUri) throw new ToqenConfigError('redirectUri is required');
+export async function startLogin(
+  config: ToqenConfig,
+  options: ToqenStartOptions = {},
+): Promise<AuthStartResult> {
+  validateAuthConfig(config);
 
   const state = generateState();
   const { verifier, challenge } = await generatePkce();
@@ -38,14 +43,28 @@ export async function startAuthFlow(config: ToqenConfig): Promise<AuthStartResul
     code_challenge: challenge,
     code_challenge_method: 'S256',
   });
-  if (config.uiLocales) params.set('ui_locales', config.uiLocales);
+
+  const uiLocales = options.uiLocales ?? config.uiLocales;
+  if (uiLocales) params.set('ui_locales', uiLocales);
 
   const headers = new Headers({ 'Content-Type': 'application/json' });
 
   headers.append('Set-Cookie', serializeState(state));
-  headers.append('Set-Cookie',
-    `${CODE_VERIFIER_COOKIE_NAME}=${verifier}; HttpOnly; SameSite=Lax; Max-Age=600; Path=/`
+  headers.append(
+    'Set-Cookie',
+    `${CODE_VERIFIER_COOKIE_NAME}=${verifier}; HttpOnly; SameSite=Lax; Max-Age=600; Path=/`,
   );
+
+  if (typeof options.returnTo === 'string') {
+    headers.append(
+      'Set-Cookie',
+      await createReturnToCookie({
+        returnTo: options.returnTo,
+        secret: config.sessionSecret,
+        secure: !config.isDevelopment,
+      }),
+    );
+  }
 
   const authorizationUrl = `${config.issuerUrl}/auth?${params.toString()}`;
 
@@ -55,13 +74,15 @@ export async function startAuthFlow(config: ToqenConfig): Promise<AuthStartResul
 export async function handleCallback(
   config: ToqenConfig,
   context: ToqenCallbackContext,
-): Promise<{ session: ToqenSession; claims: ToqenIdTokenClaims }> {
+): Promise<ToqenCallbackResult> {
+  validateAuthConfig(config);
+
   const state = context.url.searchParams.get('state') ?? '';
   const iss = context.url.searchParams.get('iss') ?? undefined;
   const code = context.url.searchParams.get('code');
 
   if (!code || !state || (iss && iss !== config.issuerUrl)) {
-    throw new ToqenCallbackError('State mismatch — possible CSRF attack');
+    throw new ToqenCallbackError('State mismatch - possible CSRF attack');
   }
 
   const cookieHeader = context.request.headers.get('cookie') ?? '';
@@ -69,12 +90,15 @@ export async function handleCallback(
   const codeVerifier = parseCookie(cookieHeader, CODE_VERIFIER_COOKIE_NAME) ?? undefined;
 
   if (!codeVerifier || !expectedState || state !== expectedState) {
-    throw new ToqenCallbackError('Mismatch — possible CSRF attack');
+    throw new ToqenCallbackError('Mismatch - possible CSRF attack');
   }
 
   const tokens = await standardTokenExchange(config, code, codeVerifier);
-
   const claims = decodeIdToken(tokens.id_token ?? '');
+  const returnTo = await readReturnToCookie({
+    cookieHeader,
+    secret: config.sessionSecret,
+  });
 
   const session: ToqenSession = {
     sub: claims.sub,
@@ -82,13 +106,15 @@ export async function handleCallback(
     refreshToken: tokens.refresh_token,
   };
 
-  return { session, claims };
+  return { session, claims, returnTo };
 }
 
 export async function refreshAccessToken(
   config: ToqenConfig,
   session: ToqenSession,
 ): Promise<ToqenSession> {
+  validateAuthConfig(config);
+
   const lockKey = session.sub;
   const existing = refreshLocks.get(lockKey);
   if (existing) return existing;
@@ -102,17 +128,20 @@ export async function refreshAccessToken(
 }
 
 export function endSession(config: ToqenConfig): Response {
+  validateAuthConfig(config);
+
   const secure = !config.isDevelopment;
-  const clearCookie = clearSessionCookie(secure);
+  const sessionCookie = clearSessionCookie(secure);
 
   const params = new URLSearchParams({
     client_id: config.clientId,
-    post_logout_redirect_uri: config.logoutRedirectUri ?? '',
+    post_logout_redirect_uri: config.logoutRedirectUri,
   });
 
   const headers = new Headers();
   headers.set('Location', `${config.issuerUrl}/session/end?${params}`);
-  headers.set('Set-Cookie', clearCookie);
+  headers.set('Set-Cookie', sessionCookie);
+  headers.append('Set-Cookie', clearReturnToCookie(secure));
 
   return new Response(null, { status: 302, headers });
 }
@@ -120,7 +149,8 @@ export function endSession(config: ToqenConfig): Response {
 export async function createSessionToken(
   config: ToqenConfig,
   session: ToqenSession,
-): Promise<{headers: Headers}> {
+  options: CreateSessionOptions = {},
+): Promise<{ headers: Headers }> {
   if (!config.sessionSecret) throw new ToqenConfigError('sessionSecret is required');
 
   const secret = new TextEncoder().encode(config.sessionSecret);
@@ -139,12 +169,14 @@ export async function createSessionToken(
     .sign(secret);
 
   const cookieName = getSessionCookieName(isSecure);
-  const cookie = serializeSessionCookie(cookieName,token, maxAge, isSecure);
+  const cookie = serializeSessionCookie(cookieName, token, maxAge, isSecure);
+  const location = normalizeReturnTo(options.returnTo ?? '/') ?? '/';
 
-  const headers = new Headers({ Location: config.returnUri || '/', 'Set-Cookie': cookie });
+  const headers = new Headers({ Location: location, 'Set-Cookie': cookie });
 
   headers.append('Set-Cookie', clearCookie(STATE_COOKIE_NAME));
   headers.append('Set-Cookie', clearCookie(CODE_VERIFIER_COOKIE_NAME));
+  headers.append('Set-Cookie', clearReturnToCookie(isSecure));
 
   return { headers };
 }
@@ -154,6 +186,7 @@ export async function verifySessionToken(
   token: string,
 ): Promise<ToqenSession | null> {
   if (!config.sessionSecret || !token) return null;
+
   try {
     const secret = new TextEncoder().encode(config.sessionSecret);
     const { payload } = await jwtVerify(token, secret, {
@@ -162,8 +195,6 @@ export async function verifySessionToken(
 
     const sub = payload.sub;
     if (!sub) return null;
-
-
 
     return {
       sub,
@@ -176,8 +207,8 @@ export async function verifySessionToken(
 }
 
 export async function getSessionToken(
-    config: ToqenConfig,
-    token: string,
+  config: ToqenConfig,
+  token: string,
 ): Promise<ToqenSession | null> {
   if (!token) return null;
   return verifySessionToken(config, token);
@@ -185,16 +216,29 @@ export async function getSessionToken(
 
 export function decodeIdToken(idToken: string): ToqenIdTokenClaims {
   if (!idToken) return { sub: '', iat: 0, exp: 0 };
+
   const parts = idToken.split('.');
   if (parts.length !== 3) throw new ToqenCallbackError('Invalid ID token format');
+
   const payload = parts[1];
   if (!payload) throw new ToqenCallbackError('Missing ID token payload');
+
   try {
     const padded = payload.replace(/-/g, '+').replace(/_/g, '/');
-    const paddedWithEquals = padded.padEnd(padded.length + (4 - (padded.length % 4)) % 4, '=');
-    const decoded = atob(paddedWithEquals);
+    const paddedWithEquals = padded.padEnd(
+      padded.length + ((4 - (padded.length % 4)) % 4),
+      '=',
+    );
+    const decoded = globalThis.atob(paddedWithEquals);
     return JSON.parse(decoded) as ToqenIdTokenClaims;
   } catch {
     throw new ToqenCallbackError('Failed to decode ID token payload');
   }
+}
+
+function validateAuthConfig(config: ToqenConfig): void {
+  if (!config.issuerUrl) throw new ToqenConfigError('issuerUrl is required');
+  if (!config.clientId) throw new ToqenConfigError('clientId is required');
+  if (!config.clientSecret) throw new ToqenConfigError('clientSecret is required');
+  if (!config.redirectUri) throw new ToqenConfigError('redirectUri is required');
 }

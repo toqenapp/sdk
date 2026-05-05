@@ -4,9 +4,12 @@ export type {
   ToqenSession,
   ToqenTokenResponse,
   ToqenCallbackContext,
+  ToqenCallbackResult,
+  CreateSessionOptions,
   AuthStartResult,
   ToqenIdTokenClaims,
   ToqenInstance,
+  ToqenStartOptions,
 } from './types.js';
 export {
   ToqenError,

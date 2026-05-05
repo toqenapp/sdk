@@ -1,38 +1,56 @@
-export async function hmac(secret: string, value: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+import { ensureServer } from './ensure-server.js';
+
+ensureServer();
+
+function getCrypto(): Crypto {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error('Web Crypto API is not available in this runtime.');
+  }
+
+  return globalThis.crypto;
 }
 
 export function generateState(): string {
+  const crypto = getCrypto();
+
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+
+  return toBase64Url(bytes);
 }
 
-export async function generatePkce(): Promise<{ verifier: string; challenge: string }> {
+export async function generatePkce(): Promise<{
+  verifier: string;
+  challenge: string;
+}> {
+  const crypto = getCrypto();
+
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
+
   const verifier = toBase64Url(bytes);
 
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
-  const challenge = toBase64Url(new Uint8Array(digest));
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(verifier),
+  );
 
-  return { verifier, challenge };
+  return {
+    verifier,
+    challenge: toBase64Url(new Uint8Array(digest)),
+  };
 }
 
 function toBase64Url(bytes: Uint8Array): string {
   let binary = '';
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return globalThis
+    .btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
 }

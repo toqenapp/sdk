@@ -1,13 +1,13 @@
 import {
-  startAuthFlow,
+  startLogin,
   handleCallback,
   createSessionToken,
   refreshAccessToken,
   getSessionToken,
   endSession,
 } from './client.js';
+import { ensureServer } from './ensure-server.js';
 import {
-  clearSessionCookie,
   getSessionCookieName,
 } from './session.js';
 import type {
@@ -15,16 +15,18 @@ import type {
   ToqenInstance,
 } from './types.js';
 
+ensureServer();
+
 export function createToqen(config: ToqenConfig): ToqenInstance {
   return {
-    start: (overrides?) =>
-      startAuthFlow({ ...config, ...overrides }),
+    start: (options?) =>
+      startLogin(config, options),
 
     callback: (context) =>
       handleCallback(config, context),
 
-    createSession: (session) =>
-      createSessionToken(config, session),
+    createSession: (session, options?) =>
+      createSessionToken(config, session, options),
 
     getSession: (token) =>
       getSessionToken(config, token),
